@@ -59,6 +59,7 @@ package bucket
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -182,6 +183,7 @@ func (c *Client) Get(ctx context.Context, bucket, key string) (*Entry, error) {
 	if err := c.do(ctx, http.MethodGet, path(bucket, key), nil, &out); err != nil {
 		return nil, err
 	}
+	out.Key = key
 	return &out, nil
 }
 
@@ -239,11 +241,22 @@ func (c *Client) History(ctx context.Context, bucket, key string) ([]Entry, erro
 	if err := c.do(ctx, http.MethodGet, path(bucket, key)+"/history", nil, &out); err != nil {
 		return nil, err
 	}
+	for i := range out.Data {
+		out.Data[i].Key = key
+	}
 	return out.Data, nil
 }
 
+// path builds the request path for one key. The key is base64url-encoded
+// rather than merely percent-escaped: a key containing "/" (URLs are common
+// keys) survives as literal bytes when percent-escaped, but many HTTP routers
+// decode the path before matching route segments, so an encoded slash can be
+// mistaken for a path separator by the time it is matched. base64url never
+// produces "/", so this ambiguity does not exist. The bucket name has no such
+// problem — the server itself constrains it to a short identifier — so it is
+// only percent-escaped, keeping bucket names human-readable on the wire.
 func path(bucket, key string) string {
-	return "/v1/kv/" + url.PathEscape(bucket) + "/" + url.PathEscape(key)
+	return "/v1/kv/" + url.PathEscape(bucket) + "/" + base64.RawURLEncoding.EncodeToString([]byte(key))
 }
 
 // do sends one request and decodes a JSON response into out (skipped when

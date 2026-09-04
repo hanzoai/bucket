@@ -189,14 +189,14 @@ func TestDelete(t *testing.T) {
 	if err := c.Delete(context.Background(), "prefs", "theme"); err != nil {
 		t.Fatal(err)
 	}
-	if gotMethod != http.MethodDelete || gotPath != "/v1/kv/prefs/theme" {
+	if gotMethod != http.MethodDelete || gotPath != "/v1/kv/prefs/dGhlbWU" {
 		t.Errorf("got %s %s", gotMethod, gotPath)
 	}
 }
 
 func TestHistory(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/kv/prefs/theme/history" {
+		if r.URL.Path != "/v1/kv/prefs/dGhlbWU/history" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(map[string][]bucket.Entry{
@@ -218,6 +218,54 @@ func TestHistory(t *testing.T) {
 	}
 	if len(entries) != 2 || entries[1].Value != "dark" {
 		t.Errorf("got %+v", entries)
+	}
+}
+
+// TestKeyWithSlashesRoundTrip proves a key containing "/" and other URL-shaped
+// characters (URLs are a common real key: a feed cache keyed by feed address)
+// survives Put/Get intact, and that Get restores the caller's original key
+// rather than echoing back the encoded form the wire actually carried.
+func TestKeyWithSlashesRoundTrip(t *testing.T) {
+	store := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			var in struct {
+				Value string `json:"value"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			store[r.URL.Path] = in.Value
+			_ = json.NewEncoder(w).Encode(map[string]uint64{"revision": 1})
+		case http.MethodGet:
+			v, ok := store[r.URL.Path]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(bucket.Entry{Value: v, Revision: 1, Operation: "put"})
+		}
+	}))
+	defer srv.Close()
+
+	c, err := bucket.New(bucket.Config{BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	key := "world:feed:v1:https://feeds.example.com/rss.xml?a=b&c=d"
+
+	if _, err := c.Put(ctx, "cache", key, "body"); err != nil {
+		t.Fatal(err)
+	}
+	e, err := c.Get(ctx, "cache", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Value != "body" {
+		t.Errorf("value = %q, want body", e.Value)
+	}
+	if e.Key != key {
+		t.Errorf("Key = %q, want the original key %q back", e.Key, key)
 	}
 }
 
