@@ -1,5 +1,7 @@
 # bucket — the Go client for cloud's versioned key-value store
 
+[![Open in Hanzo](https://hanzo.app/badges/open-in-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/bucket&ref=main&action=open) [![Edit with Hanzo](https://hanzo.app/badges/edit-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/bucket&ref=main&action=edit)
+
 `github.com/hanzoai/bucket` is the one client Hanzo products use to reach the
 versioned bucket store at `/v1/kv/{bucket}/{key}` on api.hanzo.ai, instead of
 running their own Redis for a plain cache.
